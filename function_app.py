@@ -1,51 +1,52 @@
-import azure.functions as func
 import logging
-from azure.cosmos import CosmosClient, PartitionKey
 import os
+import azure.functions as func
+from azure.cosmos import CosmosClient, exceptions
+import json
 
-# Initialize Cosmos DB client (singleton pattern)
-endpoint = os.environ['AzureResumeCosmosEndpoint']
-key = os.environ['AzureResumeConnectionString']
-client = CosmosClient(endpoint, key)
-
-# Get database and container
-database_name = 'AzureResume'
-container_name = 'Counter'
-database = client.get_database_client(database_name)
-container = database.get_container_client(container_name)
+# Initialize client outside function (singleton pattern)
+connection_string = os.getenv("AzureResumeConnectionString")
+cosmos_client = CosmosClient.from_connection_string(connection_string)
+database = cosmos_client.get_database_client("AzureResume")
+container = database.get_container_client("Counter")
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
 @app.route(route="getCVCounter")
+
 def getCVCounter(req: func.HttpRequest) -> func.HttpResponse:
-    logging.info('Python HTTP trigger function processed a request.')
-    
+    logging.info("Python HTTP trigger function processed a request.")
+
     try:
         # Read the current counter from Cosmos DB
-        counter = container.read_item(item='1', partition_key='1')
-        
+        counter_item = container.read_item(item="1", partition_key="1")
+
         # Update counter with immutable pattern
-        updated_counter = counter.copy()
-        updated_counter['count'] += 1
-        
+        updated_counter = {
+            **counter_item,
+            "count": counter_item["count"] + 1
+        }
+
         # Replace the updated counter in Cosmos DB
-        container.replace_item(item=updated_counter, partition_key='1')
-        
+        container.replace_item(item=updated_counter["id"], body=updated_counter)
+
         # Return the updated counter
         return func.HttpResponse(
-            body=str(updated_counter),
+            body=json.dumps(updated_counter),
             status_code=200,
-            headers={
-                'Content-Type': 'application/json'
-            }
+            mimetype="application/json"
         )
-    
-    except Exception as error:
-        logging.error(f'Error processing request: {str(error)}')
+    except exceptions.CosmosResourceNotFoundError:
+        logging.error("Counter item not found in Cosmos DB.")
         return func.HttpResponse(
-            body=str({'message': 'An error occurred processing your request.'}),
+            body=json.dumps({"message": "Counter item not found."}),
+            status_code=404,
+            mimetype="application/json"
+        )
+    except Exception as e:
+        logging.error(f"Error processing request: {e}")
+        return func.HttpResponse(
+            body=json.dumps({"message": "An error occurred processing your request."}),
             status_code=500,
-            headers={
-                'Content-Type': 'application/json'
-            }
+            mimetype="application/json"
         )
