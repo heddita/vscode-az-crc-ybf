@@ -1,0 +1,5 @@
+Hi, I'm trying to replicate the Azure Cloud Resume Challenge once more, for practice.  This time to change it up just a bit, I'm doing this one for my wife.
+
+## First Steps
+ -- I've added the HTML front end, modified the info and added the counter.js in the css folder.
+ -- I've created the backend structure up to add the python script for the function.
